@@ -1,0 +1,45 @@
+frameworkVersions:
+  mitreAttack: Enterprise ATT&CK v17
+  nistCsf: NIST CSF 2.0
+  zeroTrust: Microsoft Zero Trust guidance
+mappings:
+  - ruleId: 675f4863-6677-4f75-9ec5-8f705d4e6001
+    risk: Credential compromise through MFA prompt abuse
+    mitre: [T1621, T1078.004]
+    nistCsf: [DE.CM-01, DE.AE-02, RS.AN-03]
+    zeroTrust: [Identities]
+  - ruleId: 92e1d7be-dd15-4992-a6f4-3c4a84361102
+    risk: Risky identity access without strong authentication
+    mitre: [T1078.004, T1556]
+    nistCsf: [PR.AA-03, DE.CM-01, DE.AE-04]
+    zeroTrust: [Identities, Devices]
+  - ruleId: 25900944-d97f-4ed5-8e85-9a4a85a6a203
+    risk: Authentication path bypasses modern controls
+    mitre: [T1078.004]
+    nistCsf: [PR.AA-03, DE.CM-01]
+    zeroTrust: [Identities, Applications]
+  - ruleId: e049913c-b856-4882-989c-2b1fd23bd304
+    risk: Stolen credentials used from geographically inconsistent locations
+    mitre: [T1078.004]
+    nistCsf: [DE.CM-01, DE.AE-03, RS.AN-03]
+    zeroTrust: [Identities, Networks]
+  - ruleId: 461c0f16-ec8f-41c7-acb5-585956820405
+    risk: Unauthorized privileged access
+    mitre: [T1098, T1078.004]
+    nistCsf: [PR.AA-05, DE.CM-03, RS.AN-06]
+    zeroTrust: [Identities]
+  - ruleId: 8c32bb35-6c13-4fcb-b754-9367d5e90606
+    risk: Persistent application access through an unauthorized credential
+    mitre: [T1098.001]
+    nistCsf: [PR.AA-01, PR.AA-05, DE.CM-03]
+    zeroTrust: [Identities, Applications]
+  - ruleId: 3b736bde-f973-4489-8ee0-0a2568970707
+    risk: Excessive API access or automated data collection
+    mitre: [T1087.004, T1526]
+    nistCsf: [DE.CM-09, DE.AE-03, RS.AN-03]
+    zeroTrust: [Applications, Data]
+  - ruleId: f68d5b3b-0ed8-4dc2-98a0-3b92a5350808
+    risk: API discovery or enumeration
+    mitre: [T1087.004, T1526]
+    nistCsf: [DE.CM-09, DE.AE-02, RS.AN-03]
+    zeroTrust: [Applications, Data]

@@ -1,0 +1,51 @@
+id: 25900944-d97f-4ed5-8e85-9a4a85a6a203
+name: Entra ID successful legacy authentication
+description: Detects successful sign-ins using legacy authentication clients that cannot enforce modern authentication controls reliably.
+severity: Medium
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: Identity Detection Engineering
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - SigninLogs
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - InitialAccess
+  - Persistence
+relevantTechniques:
+  - T1078.004
+query: |
+  let LegacyClients = dynamic(["Exchange ActiveSync", "Other clients", "IMAP4", "MAPI Over HTTP", "POP3", "Authenticated SMTP"]);
+  SigninLogs
+  | where TimeGenerated > ago(1h)
+  | where ResultType == 0
+  | where ClientAppUsed in~ (LegacyClients)
+  | summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated), SignInCount=count(),
+      Applications=make_set(AppDisplayName, 10), CorrelationIds=make_set(CorrelationId, 10)
+      by UserPrincipalName, UserId, IPAddress, ClientAppUsed
+  | extend AccountName=tostring(split(UserPrincipalName, "@")[0]),
+      AccountUPNSuffix=tostring(split(UserPrincipalName, "@")[1])
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: UserPrincipalName
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: SingleAlert
+customDetails:
+  Client: ClientAppUsed
+  SignIns: SignInCount
+falsePositives:
+  - Approved legacy applications awaiting modernization.
+investigation: Validate the client and business owner, confirm the account is allowed to use legacy authentication, and review surrounding sign-in activity. Prefer blocking legacy authentication with Conditional Access.

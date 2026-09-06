@@ -1,0 +1,29 @@
+name: Validate Sentinel content
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Validate source content
+        run: ruby scripts/validate.rb
+      - name: Generate deployment template
+        run: ruby scripts/build_arm.rb
+      - name: Confirm generated template is valid JSON
+        run: ruby -rjson -e 'data=JSON.parse(File.read("dist/analytics-rules.json")); abort "no rules" if data.fetch("resources").empty?'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-analytics-arm
+          path: dist/analytics-rules.json
+          if-no-files-found: error

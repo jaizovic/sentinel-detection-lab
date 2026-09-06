@@ -1,0 +1,58 @@
+id: f68d5b3b-0ed8-4dc2-98a0-3b92a5350808
+name: Microsoft Graph enumeration with repeated failures
+description: Detects a user or application making requests to many Microsoft Graph endpoints with a high rate of authorization, not-found, or throttling responses.
+severity: Medium
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: API Detection Engineering
+requiredDataConnectors:
+  - connectorId: MicrosoftGraphActivityLogs
+    dataTypes:
+      - MicrosoftGraphActivityLogs
+queryFrequency: 15m
+queryPeriod: 30m
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - Discovery
+relevantTechniques:
+  - T1087.004
+  - T1526
+query: |
+  let FailureThreshold = 50;
+  let EndpointThreshold = 15;
+  MicrosoftGraphActivityLogs
+  | where TimeGenerated > ago(30m)
+  | where toint(ResponseStatusCode) in (401, 403, 404, 429)
+  | extend ActorId=coalesce(UserId, ServicePrincipalId, AppId),
+      ActorType=iff(isnotempty(UserId), "User", "Application")
+  | where isnotempty(ActorId)
+  | summarize FailureCount=count(), DistinctEndpoints=dcount(RequestUri),
+      StatusCodes=make_set(ResponseStatusCode, 10), SampleUris=make_set(RequestUri, 10),
+      FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated)
+      by ActorId, ActorType, UserId, ServicePrincipalId, AppId, IPAddress
+  | where FailureCount >= FailureThreshold and DistinctEndpoints >= EndpointThreshold
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: CloudApplication
+    fieldMappings:
+      - identifier: AppId
+        columnName: AppId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  FailedRequests: FailureCount
+  DistinctEndpoints: DistinctEndpoints
+  ActorType: ActorType
+  ApplicationId: AppId
+falsePositives:
+  - Misconfigured integrations, expired permissions, or a retry loop can generate repeated errors.
+investigation: Identify the application and owner, determine whether the URI sequence resembles discovery, inspect recent consent or credential changes, and disable or rotate the application credential if activity is unauthorized.
