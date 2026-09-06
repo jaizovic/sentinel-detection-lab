@@ -1,0 +1,68 @@
+id: 675f4863-6677-4f75-9ec5-8f705d4e6001
+name: Entra ID MFA fatigue followed by successful sign-in
+description: |
+  Detects a burst of failed MFA-related sign-ins followed by a successful sign-in for the same user and IP address. This can indicate MFA push fatigue or repeated prompt abuse.
+severity: High
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: Identity Detection Engineering
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - SigninLogs
+queryFrequency: 15m
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - CredentialAccess
+  - InitialAccess
+relevantTechniques:
+  - T1621
+  - T1078.004
+query: |
+  let FailureThreshold = 5;
+  let MfaFailures = SigninLogs
+  | where TimeGenerated > ago(1h)
+  | where ResultType != 0
+  | where ResultDescription has_any ("MFA", "multi-factor", "authentication")
+      or AuthenticationRequirement =~ "multiFactorAuthentication"
+  | summarize FailureCount=count(), FirstFailure=min(TimeGenerated), LastFailure=max(TimeGenerated),
+      FailureCodes=make_set(ResultType, 10) by UserPrincipalName, UserId, IPAddress, AppDisplayName;
+  let Successes = SigninLogs
+  | where TimeGenerated > ago(1h)
+  | where ResultType == 0
+  | project SuccessTime=TimeGenerated, UserPrincipalName, UserId, IPAddress, AppDisplayName,
+      AuthenticationRequirement, ConditionalAccessStatus, CorrelationId;
+  MfaFailures
+  | where FailureCount >= FailureThreshold
+  | join kind=inner Successes on UserPrincipalName, IPAddress, AppDisplayName
+  | where SuccessTime between (LastFailure .. LastFailure + 30m)
+  | project SuccessTime, UserPrincipalName, UserId, IPAddress, AppDisplayName, FailureCount,
+      FirstFailure, LastFailure, FailureCodes, AuthenticationRequirement, ConditionalAccessStatus, CorrelationId
+  | extend AccountName=tostring(split(UserPrincipalName, "@")[0]),
+      AccountUPNSuffix=tostring(split(UserPrincipalName, "@")[1])
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: UserPrincipalName
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  FailedMfaAttempts: FailureCount
+  FirstFailure: FirstFailure
+  LastFailure: LastFailure
+  Application: AppDisplayName
+falsePositives:
+  - A user mistypes or rejects multiple prompts and then completes a legitimate challenge.
+  - Authentication broker retries can create multiple failure records.
+investigation: |
+  Confirm the user initiated the successful sign-in. Review authentication details, device, location, risk events, Conditional Access result, and correlated sign-ins. Revoke sessions and reset credentials if compromise is confirmed.

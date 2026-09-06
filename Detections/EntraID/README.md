@@ -1,6 +1,6 @@
 # Entra ID Detection Rules
 
-This folder contains Microsoft Sentinel detections focused on:
+Scheduled analytics focused on:
 
 - MFA bypass
 - Impossible travel
@@ -8,4 +8,6 @@ This folder contains Microsoft Sentinel detections focused on:
 - Legacy authentication
 - Suspicious privilege escalation
 
-Purpose: Detection-as-Code for identity security and Zero Trust.
+Each rule includes entity mappings, MITRE ATT&CK coverage, investigation guidance, and false-positive notes. The rules require `SigninLogs` or `AuditLogs` from the Microsoft Entra ID connector.
+
+Before enabling, validate log coverage and add exclusions for approved break-glass accounts, named locations, identity protection services, and authorized automation.

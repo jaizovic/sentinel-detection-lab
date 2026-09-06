@@ -1,0 +1,58 @@
+id: 3b736bde-f973-4489-8ee0-0a2568970707
+name: Microsoft Graph unusually high request volume
+description: Detects users or applications issuing a high number of Microsoft Graph requests across many distinct endpoints in a short period.
+severity: Medium
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: API Detection Engineering
+requiredDataConnectors:
+  - connectorId: MicrosoftGraphActivityLogs
+    dataTypes:
+      - MicrosoftGraphActivityLogs
+queryFrequency: 15m
+queryPeriod: 30m
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - Discovery
+  - Collection
+relevantTechniques:
+  - T1087.004
+  - T1526
+query: |
+  let RequestThreshold = 500;
+  let EndpointThreshold = 25;
+  MicrosoftGraphActivityLogs
+  | where TimeGenerated > ago(30m)
+  | extend ActorId=coalesce(UserId, ServicePrincipalId, AppId),
+      ActorType=iff(isnotempty(UserId), "User", "Application")
+  | where isnotempty(ActorId)
+  | summarize RequestCount=count(), DistinctEndpoints=dcount(RequestUri),
+      Methods=make_set(RequestMethod, 10), StatusCodes=make_set(ResponseStatusCode, 20),
+      SampleUris=make_set(RequestUri, 10), FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated)
+      by ActorId, ActorType, UserId, ServicePrincipalId, AppId, IPAddress
+  | where RequestCount >= RequestThreshold and DistinctEndpoints >= EndpointThreshold
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: CloudApplication
+    fieldMappings:
+      - identifier: AppId
+        columnName: AppId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  Requests: RequestCount
+  DistinctEndpoints: DistinctEndpoints
+  ActorType: ActorType
+  ApplicationId: AppId
+falsePositives:
+  - Inventory, backup, compliance, security, and synchronization applications can generate legitimate high volume.
+investigation: Establish the application owner and normal request baseline. Review consented permissions, endpoint sensitivity, source IP, status-code mix, and whether volume increased after a credential or permission change.

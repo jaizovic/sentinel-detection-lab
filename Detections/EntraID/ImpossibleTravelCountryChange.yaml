@@ -1,0 +1,56 @@
+id: e049913c-b856-4882-989c-2b1fd23bd304
+name: Entra ID rapid successful sign-ins from different countries
+description: Detects consecutive successful sign-ins for the same user from different countries within 30 minutes. This is a lightweight impossible-travel signal and should be combined with Entra risk and device context.
+severity: Medium
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: Identity Detection Engineering
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - SigninLogs
+queryFrequency: 15m
+queryPeriod: 2h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - InitialAccess
+relevantTechniques:
+  - T1078.004
+query: |
+  SigninLogs
+  | where TimeGenerated > ago(2h)
+  | where ResultType == 0
+  | extend Country=tostring(LocationDetails.countryOrRegion), City=tostring(LocationDetails.city)
+  | where isnotempty(UserPrincipalName) and isnotempty(Country)
+  | sort by UserPrincipalName asc, TimeGenerated asc
+  | serialize
+  | extend PreviousUser=prev(UserPrincipalName), PreviousTime=prev(TimeGenerated),
+      PreviousCountry=prev(Country), PreviousCity=prev(City), PreviousIP=prev(IPAddress)
+  | where UserPrincipalName == PreviousUser
+  | where Country != PreviousCountry and TimeGenerated - PreviousTime between (0m .. 30m)
+  | project TimeGenerated, PreviousTime, UserPrincipalName, UserId, IPAddress, PreviousIP,
+      Country, PreviousCountry, City, PreviousCity, AppDisplayName, DeviceDetail, RiskLevelDuringSignIn
+  | extend AccountName=tostring(split(UserPrincipalName, "@")[0]),
+      AccountUPNSuffix=tostring(split(UserPrincipalName, "@")[1])
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: UserPrincipalName
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  CurrentCountry: Country
+  PreviousCountry: PreviousCountry
+  PreviousAddress: PreviousIP
+falsePositives:
+  - Corporate VPN egress, mobile carrier routing, and inaccurate IP geolocation.
+investigation: Confirm both sign-ins with the user, compare device identifiers and authentication methods, and review VPN or trusted named-location records. Treat this as supporting evidence rather than proof of physical travel.

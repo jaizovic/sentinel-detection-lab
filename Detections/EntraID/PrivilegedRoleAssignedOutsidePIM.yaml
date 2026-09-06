@@ -1,0 +1,67 @@
+id: 461c0f16-ec8f-41c7-acb5-585956820405
+name: Entra ID privileged role assigned outside PIM
+description: Detects direct privileged-role assignments performed outside Microsoft Entra Privileged Identity Management.
+severity: High
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: Identity Detection Engineering
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - AuditLogs
+queryFrequency: 1h
+queryPeriod: 1h
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - PrivilegeEscalation
+  - Persistence
+relevantTechniques:
+  - T1098
+  - T1078.004
+query: |
+  AuditLogs
+  | where TimeGenerated > ago(1h)
+  | where Category =~ "RoleManagement"
+  | where OperationName has "Add member to role outside of PIM"
+      or (LoggedByService =~ "Core Directory" and OperationName =~ "Add member to role"
+          and tostring(InitiatedBy.app.displayName) !in~ ("MS-PIM", "MS-PIM-Fairfax"))
+  | mv-apply TargetResource=TargetResources on (
+      where TargetResource.type =~ "User"
+      | extend TargetUserPrincipalName=tostring(TargetResource.userPrincipalName),
+          TargetUserId=tostring(TargetResource.id), ModifiedProperties=TargetResource.modifiedProperties)
+  | mv-apply Property=ModifiedProperties on (
+      where tostring(Property.displayName) in~ ("Role.DisplayName", "Role.WellKnownObjectName")
+      | extend RoleName=trim('"', tostring(Property.newValue)))
+  | extend InitiatingUserPrincipalName=tostring(InitiatedBy.user.userPrincipalName),
+      InitiatingUserId=tostring(InitiatedBy.user.id),
+      InitiatingApp=tostring(InitiatedBy.app.displayName),
+      InitiatingIPAddress=tostring(coalesce(InitiatedBy.user.ipAddress, InitiatedBy.app.ipAddress))
+  | project TimeGenerated, OperationName, Result, RoleName, TargetUserPrincipalName, TargetUserId,
+      InitiatingUserPrincipalName, InitiatingUserId, InitiatingApp, InitiatingIPAddress, CorrelationId
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: InitiatingUserPrincipalName
+      - identifier: AadUserId
+        columnName: InitiatingUserId
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: TargetUserPrincipalName
+      - identifier: AadUserId
+        columnName: TargetUserId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: InitiatingIPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  AssignedRole: RoleName
+  InitiatingApplication: InitiatingApp
+falsePositives:
+  - Approved emergency or break-glass role assignment outside PIM.
+investigation: Confirm an approved change record and time-bound need. Review the initiator, target, role, subsequent activity, and PIM audit history. Remove unauthorized assignments and investigate both identities.

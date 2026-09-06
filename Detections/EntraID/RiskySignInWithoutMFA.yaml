@@ -1,0 +1,54 @@
+id: 92e1d7be-dd15-4992-a6f4-3c4a84361102
+name: Entra ID risky sign-in completed without MFA
+description: Detects successful medium- or high-risk user sign-ins where the recorded authentication requirement was not multifactor authentication.
+severity: High
+status: Available
+kind: Scheduled
+version: 1.0.0
+owner: Identity Detection Engineering
+requiredDataConnectors:
+  - connectorId: AzureActiveDirectory
+    dataTypes:
+      - SigninLogs
+queryFrequency: 15m
+queryPeriod: 30m
+triggerOperator: gt
+triggerThreshold: 0
+tactics:
+  - InitialAccess
+  - DefenseEvasion
+relevantTechniques:
+  - T1078.004
+  - T1556
+query: |
+  SigninLogs
+  | where TimeGenerated > ago(30m)
+  | where ResultType == 0
+  | where RiskLevelDuringSignIn in~ ("medium", "high") or RiskLevelAggregated in~ ("medium", "high")
+  | where AuthenticationRequirement !~ "multiFactorAuthentication"
+  | project TimeGenerated, UserPrincipalName, UserId, IPAddress, AppDisplayName, ClientAppUsed,
+      RiskLevelDuringSignIn, RiskLevelAggregated, RiskState, AuthenticationRequirement,
+      ConditionalAccessStatus, Location, DeviceDetail, CorrelationId
+  | extend AccountName=tostring(split(UserPrincipalName, "@")[0]),
+      AccountUPNSuffix=tostring(split(UserPrincipalName, "@")[1])
+entityMappings:
+  - entityType: Account
+    fieldMappings:
+      - identifier: FullName
+        columnName: UserPrincipalName
+      - identifier: AadUserId
+        columnName: UserId
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: IPAddress
+eventGroupingSettings:
+  aggregationKind: AlertPerResult
+customDetails:
+  SignInRisk: RiskLevelDuringSignIn
+  ConditionalAccess: ConditionalAccessStatus
+  Application: AppDisplayName
+falsePositives:
+  - Federated or passwordless authentication can satisfy an MFA claim while producing an unexpected authentication-requirement value.
+  - Risk can be remediated after the event but before investigation.
+investigation: Confirm authentication-method details and Conditional Access evaluation, validate the device and source IP, and check whether the account or session was later remediated.

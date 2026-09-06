@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": { "type": "string" },
+    "workbookDisplayName": { "type": "string", "defaultValue": "Sentinel Detection Lab - Identity Security" },
+    "workbookId": { "type": "string", "defaultValue": "5c810c8f-a645-4ddd-8a53-2b09a4acd101" },
+    "location": { "type": "string", "defaultValue": "[resourceGroup().location]" }
+  },
+  "variables": {
+    "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+    "workbook": {
+      "version": "Notebook/1.0",
+      "items": [
+        {
+          "type": 1,
+          "name": "overview",
+          "content": {
+            "json": "# Identity Security Operations\nMonitor successful and failed authentication, risky access, legacy clients, and privileged identity changes. Investigate trends together with Conditional Access and device context."
+          }
+        },
+        {
+          "type": 9,
+          "name": "parameters",
+          "content": {
+            "version": "KqlParameterItem/1.0",
+            "parameters": [
+              {
+                "id": "bc643272-94bf-4e6f-aa1e-521c254a2a01",
+                "version": "KqlParameterItem/1.0",
+                "name": "TimeRange",
+                "type": 4,
+                "isRequired": true,
+                "value": { "durationMs": 86400000 },
+                "typeSettings": { "selectableValues": [1, 3, 4, 5, 6, 7, 8, 9] }
+              }
+            ],
+            "style": "pills",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          }
+        },
+        {
+          "type": 3,
+          "name": "signin-summary",
+          "content": {
+            "version": "KqlItem/1.0",
+            "title": "Sign-in outcomes over time",
+            "query": "SigninLogs\n| where TimeGenerated {TimeRange}\n| extend Outcome=iff(ResultType == 0, 'Success', 'Failure')\n| summarize SignIns=count() by bin(TimeGenerated, 1h), Outcome\n| order by TimeGenerated asc",
+            "visualization": "timechart",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "timeContextFromParameter": "TimeRange",
+            "size": 0
+          }
+        },
+        {
+          "type": 3,
+          "name": "risky-signins",
+          "content": {
+            "version": "KqlItem/1.0",
+            "title": "Risky successful sign-ins",
+            "query": "SigninLogs\n| where TimeGenerated {TimeRange}\n| where ResultType == 0\n| where RiskLevelDuringSignIn in~ ('medium', 'high') or RiskLevelAggregated in~ ('medium', 'high')\n| project TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName, RiskLevelDuringSignIn, AuthenticationRequirement, ConditionalAccessStatus\n| order by TimeGenerated desc",
+            "visualization": "table",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "timeContextFromParameter": "TimeRange",
+            "size": 0
+          }
+        },
+        {
+          "type": 3,
+          "name": "legacy-auth",
+          "content": {
+            "version": "KqlItem/1.0",
+            "title": "Successful legacy authentication by client",
+            "query": "SigninLogs\n| where TimeGenerated {TimeRange}\n| where ResultType == 0\n| where ClientAppUsed in~ ('Exchange ActiveSync', 'Other clients', 'IMAP4', 'MAPI Over HTTP', 'POP3', 'Authenticated SMTP')\n| summarize SignIns=count(), Users=dcount(UserPrincipalName) by ClientAppUsed\n| order by SignIns desc",
+            "visualization": "barchart",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "timeContextFromParameter": "TimeRange",
+            "size": 0
+          }
+        },
+        {
+          "type": 3,
+          "name": "privileged-changes",
+          "content": {
+            "version": "KqlItem/1.0",
+            "title": "Recent role and application credential changes",
+            "query": "AuditLogs\n| where TimeGenerated {TimeRange}\n| where Category in~ ('RoleManagement', 'ApplicationManagement')\n| where OperationName has_any ('Add member to role', 'credentials', 'Certificates and secrets')\n| extend Initiator=coalesce(tostring(InitiatedBy.user.userPrincipalName), tostring(InitiatedBy.app.displayName))\n| project TimeGenerated, Category, OperationName, Result, Initiator, TargetResources, CorrelationId\n| order by TimeGenerated desc",
+            "visualization": "table",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "timeContextFromParameter": "TimeRange",
+            "size": 0
+          }
+        }
+      ],
+      "fallbackResourceIds": ["[variables('workspaceResourceId')]"],
+      "isLocked": false
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2022-04-01",
+      "name": "[parameters('workbookId')]",
+      "location": "[parameters('location')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "[parameters('workbookDisplayName')]",
+        "serializedData": "[string(variables('workbook'))]",
+        "version": "Notebook/1.0",
+        "sourceId": "[variables('workspaceResourceId')]",
+        "category": "sentinel"
+      }
+    }
+  ]
+}
